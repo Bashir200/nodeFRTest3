@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Recognize images</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			width: 100vw;
+			height: 100vh;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			flex-direction: column;
+		}
+		canvas {
+			position: absolute;
+			top: 0;
+			left: 0;
+		}
+	</style>
+	<!--<script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>-->
+	<script src="http://code.jquery.com/jquery-latest.min.js"></script>
+	<script src="face-api.min.js"></script>
+	<!--<script src="view.js"></script>-->
+</head>
+
+<body>
+	<input type="file" id="image" accept=".jpg, .jpeg, .png">
+	<img src="" id="refImg">
+
+	<script>
+		const img = document.getElementById('image')
+		//const img = $('#image').get(0).files[0]
+
+		Promise.all([
+			faceapi.nets.faceRecognitionNet.loadFromUri('/weights'),
+			faceapi.nets.faceLandmark68Net.loadFromUri('/weights'),
+			faceapi.nets.ssdMobilenetv1.loadFromUri('/weights')
+		]).then(start)
+
+		async function start() {
+			const container = document.createElement('div')
+			container.style.position = 'relative'
+			document.body.append(container)
+			const labeledFaceDescriptors = await loadLabeledImages()
+			const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6)
+			document.body.append('Loaded')
+			img.addEventListener('change', async () => {
+				const photo = await faceapi.bufferToImage(img.files[0])
+				container.append(photo)
+				//const photo = await faceapi.bufferToImage(img)
+		        //$('#refImg').get(0).src = photo.src
+		        const canvas = faceapi.createCanvasFromMedia(photo)
+		        //canvas.style.position = 'absolute'
+		        container.append(canvas)
+		        const displaySize = {width:photo.width, height:photo.height}
+		        faceapi.matchDimensions(canvas, displaySize) 
+				const detections = await faceapi.detectAllFaces(photo).withFaceLandmarks().withFaceDescriptors()
+				//document.body.append(detections.length)
+				const resizeDetections = faceapi.resizeResults(detections, displaySize)
+				const results = resizeDetections.map(d =>faceMatcher.findBestMatch(d.descriptor))
+				results.forEach((result, i) => {
+					const box = resizeDetections[i].detection.box
+					const drawBox = faceapi.draw.DrawBox(box, {label: result.toString()})
+					drawBox.draw(canvas)
+					//faceapi.draw.drawLandmarks(canvas)
+					//faceapi.draw.drawFaceExpressions(canvas)
+
+				})
+
+			})
+		}
+		function loadLabeledImages(){
+			const labels = ['Bashir', 'Gadafi']
+			return Promise.All(
+				labels.map(async label =>{
+					descriptions = []
+					for(let i=0; i<2; i++){
+						const img = await faceapi.fetchImage(`http://127.0.0.1:8008/${label}/${i}.jpg`)
+						const detections = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor()
+						descriptions.push(detections.descriptor)
+
+					}
+					return new faceapi.labeledFaceDescriptors(label, descriptions)
+				})
+			)
+		}
+	</script>
+</body>
+</html>
